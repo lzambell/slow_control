@@ -4,9 +4,6 @@ import numpy as np
 from datetime import datetime, timedelta, timezone
 import socket
 
-#import matplotlib.pyplot as plt
-#import matplotlib.gridspec as gridspec
-
 
 import access
 import dump
@@ -44,6 +41,7 @@ def check_dates(date, start, stop):
     
 def need_help():
     print("\nUsage: python get_db_ana.py ")
+    print("-det np02 or np04")
     print(" -start <timestamp in s> ")
     print(" -stop <timestamp in s> (if not provided, stop time in 24h later than start time)")
     print(" -date <DD-MM-YYY> instead of timestamps, for values in a 24h range")    
@@ -64,9 +62,12 @@ ts_stop   = -1
 config_file = ""
 output_file = ""
 date = ""
+detector = ""
 
 for index, arg in enumerate(sys.argv):
-    if arg in ['-start'] and len(sys.argv) > index + 1:
+    if arg in ['-det'] and len(sys.argv) > index + 1:
+        detector = sys.argv[index+1]
+    elif arg in ['-start'] and len(sys.argv) > index + 1:
         ts_start = float(sys.argv[index+1])
     elif arg in ['-stop'] and len(sys.argv) > index + 1:
         ts_stop = float(sys.argv[index+1])
@@ -82,6 +83,9 @@ for index, arg in enumerate(sys.argv):
 
 date, ts_start, ts_stop = check_dates(date, ts_start, ts_stop)
 
+if(len(detector) == 0):
+    print('No detector provided!')
+    need_help()
 
 if(os.path.exists(config_file) is False):
     print(" >>> Dictionnary file do not exist !")
@@ -92,8 +96,7 @@ dico = {}
 with open(config_file) as f:
     for lines in f.readlines():
         lines = lines.rstrip('\n')
-        li = lines.split(' ')        
-
+        li = lines.split('\t')        
         dico[li[0]] = int(li[1])
 
 #print(dico)                       
@@ -101,10 +104,9 @@ with open(config_file) as f:
 day_start = datetime.fromtimestamp(ts_start)
 day_stop = datetime.fromtimestamp(ts_stop)
 
-print(day_start,  ' to ', day_stop)
+print('Looking at SC data from ', day_start, ' to ', day_stop)
 
 at_cern = ("cern" in get_dns_domain())
-det = 'np04'
 values = {}
 
 
@@ -119,21 +121,28 @@ for name, elemID in dico.items():
     day_start = datetime.fromtimestamp(ts_start)
     day_stop = datetime.fromtimestamp(ts_stop)
 
-    data = access.access_slow_control(det, at_cern, elemID, day_start, day_stop)
-    
+    data = access.access_slow_control(detector, at_cern, elemID, day_start, day_stop)
+    if(len(data) == 0):
+        continue
+
     time_sel = (data[:,0] > ts_start) & (data[:,0] < ts_stop)
     data_sel = data[time_sel]
     data_sel[:,0] -= ts_start
+    ndata = len(data_sel)
     
     data_interest = []
     for t in delta_t:
         idx = np.searchsorted(data_sel[:,0], t)
-        data_interest.append(data_sel[idx])
+        if(idx>=0 and idx < ndata):
+            data_interest.append(data_sel[idx])
 
+    if(len(data_interest) == 0):
+        continue
+        
 
     data_interest = np.asarray(data_interest)
     data_interest[:,0] += ts_start
 
     values[name] = data_interest
 
-np.savez('temp_evo_filling/'+date+'.npz', **values)
+np.savez('temp_evo_filling/'+date+'_'+detector+'.npz', **values)
