@@ -10,7 +10,7 @@ def access_slow_control(det, from_cern, elemID, day_start, day_stop):
 
 def access_via_cache(det, elemID, day_start, day_stop):
 
-    """ it's not working for NP04, so temporarily redirecting to the webpage method """
+    """ cache acces is no longer working, so temporarily redirecting to the webpage method """
     return access_via_page(det, elemID, day_start, day_stop)    
     
     if(det == 'np02'):
@@ -49,33 +49,51 @@ def access_via_page(det, elemID, day_start, day_stop):
         
 
     if(det=='np02'):
-        url = 'https://np02-slow-control.web.cern.ch/np02-slow-control/app/php-db-conn/histogramrange.conn.php?'
-        url += 'elemId=' + str(elemID)
-        url += '&start=' + day_start.strftime("%d-%m-%Y")
-        url += '&end=' + day_stop.strftime("%d-%m-%Y")
-    else:
-        tmp_url = 'https://np04-slow-control.web.cern.ch/np04-slow-control/app/#!/histogram/'
-        tmp_url += str(elemID)
-        tmp_url += '&start=' + day_start.strftime("%d-%m-%Y")
-        tmp_url += '&end=' + day_stop.strftime("%d-%m-%Y")
-        #print(tmp_url)
-        #
+        url = 'https://np02-data-api-slow-control.app.cern.ch/np02histogram/'
+        url += str(elemID)
+        url += '/'+day_start.strftime("%Y-%m-%d")+"%2000:00:00"
+        url += '/'+day_stop.strftime("%Y-%m-%d")+"%2023:59:59"
+
+
+        rr = urllib.request.urlopen(url)
+        r = rr.read().decode("utf-8").strip()#[1:-1]
+
+        res = json.loads(r)
+
+        data = []
+        for key, val in res.items():
+            data.append([int(key), val])
+
+        data = np.array(data)
+
+        
+    elif(det=='np04'):
+
         url = 'https://np04-slow-control.web.cern.ch/np04-slow-control/app/php-db-conn/histogramrange.conn.php?'
+        #url = 'https://np04-slow-control.web.cern.ch/np04-slow-control/app/php-db-conn/np04histogram.php?'
         url += 'elemId=' + str(elemID)
-        #url += str(elemID)
         url += '&start=' + day_start.strftime("%d-%m-%Y")
         url += '&end=' + day_stop.strftime("%d-%m-%Y")
-        #print(url)
 
+        print(url)
 
-    rr = urllib.request.urlopen(url)
-    r = rr.read()
+        rr = urllib.request.urlopen(url)
+        r = rr.read()
 
-    res = json.loads(r)
+        res = json.loads(r)
+        
+        data = res['records']
+        data = np.array(data)
+        
+    else:
+        print('Cannot access SC data for ',det,' detector\nBye!')
+        exit()
 
-    data = res['records']
-    data = np.array(data)
+    
+    if(len(data) == 0):
+        return data
 
+        
     """ converts the timestamps to s """
     data[:,0] *= 1.e-3     
 
